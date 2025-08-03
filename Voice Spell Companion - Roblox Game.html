@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Spell Companion</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 50%, #667eea 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(20px);
+            border-radius: 25px;
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        h1 {
+            color: white;
+            margin-bottom: 30px;
+            font-size: 2.8em;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .status-container {
+            margin: 30px 0;
+        }
+
+        .status {
+            padding: 20px;
+            border-radius: 15px;
+            margin: 20px 0;
+            font-weight: bold;
+            font-size: 18px;
+            transition: all 0.4s ease;
+            border: 2px solid transparent;
+            min-height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .status.ready {
+            background: rgba(33, 150, 243, 0.2);
+            color: #2196F3;
+            border-color: #2196F3;
+        }
+
+        .status.listening {
+            background: rgba(76, 175, 80, 0.3);
+            color: #4CAF50;
+            border-color: #4CAF50;
+            animation: pulse 2s infinite;
+        }
+
+        .status.processing {
+            background: rgba(255, 193, 7, 0.3);
+            color: #FFC107;
+            border-color: #FFC107;
+            animation: shimmer 1.5s infinite;
+        }
+
+        .status.error {
+            background: rgba(244, 67, 54, 0.3);
+            color: #f44336;
+            border-color: #f44336;
+        }
+
+        .status.success {
+            background: rgba(76, 175, 80, 0.3);
+            color: #4CAF50;
+            border-color: #4CAF50;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7); }
+            50% { transform: scale(1.02); box-shadow: 0 0 0 10px rgba(76, 175, 80, 0); }
+        }
+
+        @keyframes shimmer {
+            0% { background-position: -200px 0; }
+            100% { background-position: 200px 0; }
+        }
+
+        .controls {
+            margin: 30px 0;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        button {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 18px 35px;
+            border-radius: 50px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+            position: relative;
+            overflow: hidden;
+            min-width: 160px;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        button:active:not(:disabled) {
+            transform: translateY(-1px);
+        }
+
+        button:disabled {
+            background: linear-gradient(45deg, #999, #666);
+            cursor: not-allowed;
+            transform: none;
+            opacity: 0.6;
+        }
+
+        button.listening {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            animation: buttonPulse 2s infinite;
+        }
+
+        @keyframes buttonPulse {
+            0%, 100% { box-shadow: 0 8px 20px rgba(255, 107, 107, 0.4); }
+            50% { box-shadow: 0 8px 30px rgba(255, 107, 107, 0.8); }
+        }
+
+        .spell-detection {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 25px;
+            margin: 25px 0;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .spell-detection h3 {
+            color: white;
+            margin-bottom: 20px;
+            font-size: 1.4em;
+        }
+
+        .confidence-meter {
+            background: rgba(0, 0, 0, 0.2);
+            height: 10px;
+            border-radius: 5px;
+            margin: 15px 0;
+            overflow: hidden;
+        }
+
+        .confidence-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3);
+            border-radius: 5px;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .live-transcript {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 15px 0;
+            min-height: 50px;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .spell-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .spell-badge {
+            background: linear-gradient(45deg, #ffecd2, #fcb69f);
+            color: #333;
+            padding: 12px 16px;
+            border-radius: 25px;
+            font-size: 14px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+            cursor: pointer;
+        }
+
+        .spell-badge:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .spell-badge.detected {
+            background: linear-gradient(45deg, #a8edea, #fed6e3);
+            border-color: #4CAF50;
+            animation: spellGlow 1s ease-in-out;
+        }
+
+        @keyframes spellGlow {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .spell-log {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 25px;
+            max-height: 250px;
+            overflow-y: auto;
+            text-align: left;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .spell-log h4 {
+            color: white;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .log-entry {
+            color: white;
+            margin: 12px 0;
+            padding: 10px 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            border-left: 4px solid #4ecdc4;
+            font-size: 14px;
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        .log-entry.success {
+            border-left-color: #4CAF50;
+            background: rgba(76, 175, 80, 0.1);
+        }
+
+        .log-entry.error {
+            border-left-color: #f44336;
+            background: rgba(244, 67, 54, 0.1);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .browser-support {
+            background: rgba(255, 193, 7, 0.2);
+            border: 2px solid #FFC107;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            color: #FFC107;
+            font-size: 14px;
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 25px;
+                margin: 10px;
+            }
+            
+            h1 {
+                font-size: 2.2em;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            button {
+                width: 100%;
+                max-width: 280px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔮 Voice Spell Caster</h1>
+        
+        <div class="status-container">
+            <div id="status" class="status ready">
+                🎯 Ready to detect spells! Click "Start Listening" to begin.
+            </div>
+        </div>
+
+        <div class="controls">
+            <button id="startBtn" onclick="startListening()">
+                <span id="startBtnText">🎤 Start Listening</span>
+            </button>
+            <button id="stopBtn" onclick="stopListening()" disabled>
+                ⏹️ Stop Listening
+            </button>
+            <button id="testBtn" onclick="testVoice()">
+                🔧 Test Voice
+            </button>
+        </div>
+
+        <div class="spell-detection">
+            <h3>🎯 Voice Detection</h3>
+            
+            <div class="live-transcript" id="liveTranscript">
+                Speak clearly and say spell names...
+            </div>
+            
+            <div style="color: white; margin: 10px 0;">Confidence Level:</div>
+            <div class="confidence-meter">
+                <div class="confidence-bar" id="confidenceBar"></div>
+            </div>
+
+            <h3 style="margin-top: 25px;">✨ Available Spells</h3>
+            <div class="spell-grid" id="spellGrid">
+                <div class="spell-badge" data-spell="fireball">🔥 Fireball</div>
+                <div class="spell-badge" data-spell="heal">💚 Heal</div>
+                <div class="spell-badge" data-spell="lightning">⚡ Lightning</div>
+                <div class="spell-badge" data-spell="shield">🛡️ Shield</div>
+                <div class="spell-badge" data-spell="teleport">🌀 Teleport</div>
+                <div class="spell-badge" data-spell="iceblast">❄️ Ice Blast</div>
+            </div>
+        </div>
+
+        <div class="spell-log">
+            <h4>📜 Spell Detection Log</h4>
+            <div id="logContainer">
+                <div class="log-entry">Voice Spell Companion loaded! Speak clearly for best results.</div>
+            </div>
+        </div>
+
+        <div class="browser-support" id="browserWarning" style="display: none;">
+            ⚠️ For best results, use Chrome, Edge, or Safari. Make sure to allow microphone access!
+        </div>
+    </div>
+
+    <script>
+        // Enhanced Voice Recognition System
+        class VoiceSpellCaster {
+            constructor() {
+                this.recognition = null;
+                this.isListening = false;
+                this.isSupported = false;
+                this.finalTranscript = '';
+                this.interimTranscript = '';
+                
+                // Spell configurations with multiple variations
+                this.spells = {
+                    fireball: {
+                        variations: ['fireball', 'fire ball', 'fire', 'flame', 'burn'],
+                        emoji: '🔥',
+                        name: 'Fireball'
+                    },
+                    heal: {
+                        variations: ['heal', 'healing', 'cure', 'restore', 'health'],
+                        emoji: '💚',
+                        name: 'Heal'
+                    },
+                    lightning: {
+                        variations: ['lightning', 'thunder', 'bolt', 'electric', 'shock'],
+                        emoji: '⚡',
+                        name: 'Lightning'
+                    },
+                    shield: {
+                        variations: ['shield', 'protect', 'defense', 'barrier', 'guard'],
+                        emoji: '🛡️',
+                        name: 'Shield'
+                    },
+                    teleport: {
+                        variations: ['teleport', 'portal', 'warp', 'travel', 'transport'],
+                        emoji: '🌀',
+                        name: 'Teleport'
+                    },
+                    iceblast: {
+                        variations: ['ice blast', 'ice', 'freeze', 'frost', 'cold'],
+                        emoji: '❄️',
+                        name: 'Ice Blast'
+                    }
+                };
+
+                this.lastDetectedSpell = null;
+                this.detectionCooldown = 2000; // 2 seconds between same spell detections
+                
+                this.init();
+            }
+
+            init() {
+                this.checkBrowserSupport();
+                this.setupRecognition();
+                this.bindEvents();
+                this.log('System initialized. Ready for voice commands!');
+            }
+
+            checkBrowserSupport() {
+                if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                    this.isSupported = true;
+                    this.log('✅ Speech recognition supported!', 'success');
+                } else {
+                    this.isSupported = false;
+                    this.updateStatus('❌ Speech recognition not supported in this browser', 'error');
+                    document.getElementById('browserWarning').style.display = 'block';
+                    this.log('❌ Speech recognition not supported. Please use Chrome, Edge, or Safari.', 'error');
+                }
+            }
+
+            setupRecognition() {
+                if (!this.isSupported) return;
+
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                this.recognition = new SpeechRecognition();
+
+                // Enhanced configuration
+                this.recognition.continuous = true;
+                this.recognition.interimResults = true;
+                this.recognition.lang = 'en-US';
+                this.recognition.maxAlternatives = 3;
+
+                this.recognition.onstart = () => {
+                    this.isListening = true;
+                    this.updateStatus('🎤 Listening for spells... Speak clearly!', 'listening');
+                    this.updateButtons();
+                    this.log('🎤 Voice recognition started', 'success');
+                };
+
+                this.recognition.onresult = (event) => {
+                    this.processResults(event);
+                };
+
+                this.recognition.onerror = (event) => {
+                    this.handleError(event);
+                };
+
+                this.recognition.onend = () => {
+                    if (this.isListening) {
+                        // Auto-restart if we're supposed to be listening
+                        setTimeout(() => {
+                            if (this.isListening) {
+                                try {
+                                    this.recognition.start();
+                                } catch (e) {
+                                    this.log('Auto-restart failed: ' + e.message, 'error');
+                                    this.stopListening();
+                                }
+                            }
+                        }, 100);
+                    }
+                };
+            }
+
+            processResults(event) {
+                let interim = '';
+                let final = '';
+
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript.toLowerCase().trim();
+                    const confidence = event.results[i][0].confidence;
+
+                    if (event.results[i].isFinal) {
+                        final += transcript + ' ';
+                        this.finalTranscript = final;
+                    } else {
+                        interim += transcript + ' ';
+                        this.interimTranscript = interim;
+                    }
+
+                    // Update confidence meter
+                    this.updateConfidence(confidence || 0);
+                }
+
+                // Update live transcript
+                const display = final + (interim ? `<span style="opacity: 0.6;">${interim}</span>` : '');
+                document.getElementById('liveTranscript').innerHTML = display || 'Listening...';
+
+                // Check for spells in both final and interim results
+                const textToCheck = (final + interim).toLowerCase();
+                this.detectSpells(textToCheck);
+            }
+
+            detectSpells(text) {
+                for (const [spellKey, spellData] of Object.entries(this.spells)) {
+                    for (const variation of spellData.variations) {
+                        if (text.includes(variation)) {
+                            this.castSpell(spellKey, spellData, variation);
+                            return; // Only cast one spell at a time
+                        }
+                    }
+                }
+            }
+
+            castSpell(spellKey, spellData, detectedWord) {
+                // Cooldown check
+                const now = Date.now();
+                if (this.lastDetectedSpell && 
+                    this.lastDetectedSpell.spell === spellKey && 
+                    now - this.lastDetectedSpell.time < this.detectionCooldown) {
+                    return; // Too soon to cast same spell again
+                }
+
+                this.lastDetectedSpell = { spell: spellKey, time: now };
+
+                // Visual feedback
+                this.highlightSpell(spellKey);
+                this.updateStatus(`🔮 Detected: ${spellData.emoji} ${spellData.name}!`, 'success');
+                
+                // Log the detection
+                this.log(`${spellData.emoji} Detected "${detectedWord}" → Casting ${spellData.name}!`, 'success');
+
+                // Simulate spell casting (replace with actual Roblox connection later)
+                setTimeout(() => {
+                    if (this.isListening) {
+                        this.updateStatus('🎤 Listening for spells... Speak clearly!', 'listening');
+                    }
+                }, 2000);
+            }
+
+            highlightSpell(spellKey) {
+                // Remove previous highlights
+                document.querySelectorAll('.spell-badge').forEach(badge => {
+                    badge.classList.remove('detected');
+                });
+
+                // Highlight detected spell
+                const badge = document.querySelector(`[data-spell="${spellKey}"]`);
+                if (badge) {
+                    badge.classList.add('detected');
+                    setTimeout(() => badge.classList.remove('detected'), 2000);
+                }
+            }
+
+            updateConfidence(confidence) {
+                const percentage = Math.round(confidence * 100);
+                document.getElementById('confidenceBar').style.width = percentage + '%';
+            }
+
+            handleError(event) {
+                let errorMessage = 'Voice recognition error: ';
+                
+                switch(event.error) {
+                    case 'no-speech':
+                        errorMessage += 'No speech detected. Try speaking louder.';
+                        break;
+                    case 'audio-capture':
+                        errorMessage += 'Microphone not accessible. Check permissions.';
+                        break;
+                    case 'not-allowed':
+                        errorMessage += 'Microphone permission denied. Please allow access.';
+                        break;
+                    case 'network':
+                        errorMessage += 'Network error. Check internet connection.';
+                        break;
+                    default:
+                        errorMessage += event.error;
+                }
+
+                this.log(errorMessage, 'error');
+                this.updateStatus('❌ ' + errorMessage, 'error');
+                
+                // Auto-retry for recoverable errors
+                if (['no-speech', 'network'].includes(event.error) && this.isListening) {
+                    setTimeout(() => {
+                        if (this.isListening) {
+                            this.log('Retrying voice recognition...', 'success');
+                            try {
+                                this.recognition.start();
+                            } catch (e) {
+                                this.stopListening();
+                            }
+                        }
+                    }, 2000);
+                } else {
+                    this.stopListening();
+                }
+            }
+
+            startListening() {
+                if (!this.isSupported) {
+                    this.updateStatus('❌ Speech recognition not supported', 'error');
+                    return;
+                }
+
+                try {
+                    this.finalTranscript = '';
+                    this.interimTranscript = '';
+                    this.recognition.start();
+                    this.log('Starting voice recognition...', 'success');
+                } catch (error) {
+                    this.log('Failed to start: ' + error.message, 'error');
+                    this.updateStatus('❌ Failed to start voice recognition', 'error');
+                }
+            }
+
+            stopListening() {
+                this.isListening = false;
+                if (this.recognition) {
+                    this.recognition.stop();
+                }
+                this.updateStatus('🎯 Ready to detect spells! Click "Start Listening" to begin.', 'ready');
+                this.updateButtons();
+                document.getElementById('liveTranscript').innerHTML = 'Speak clearly and say spell names...';
+                document.getElementById('confidenceBar').style.width = '0%';
+                this.log('Voice recognition stopped', 'success');
+            }
+
+            testVoice() {
+                this.log('🔧 Testing voice recognition...', 'success');
+                this.updateStatus('🔧 Say "Hello test" to verify your microphone...', 'processing');
+                
+                if (!this.isSupported) {
+                    this.updateStatus('❌ Speech recognition not supported', 'error');
+                    return;
+                }
+
+                // Quick test
+                const testRecognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+                testRecognition.continuous = false;
+                testRecognition.interimResults = false;
+
+                testRecognition.onresult = (event) => {
+                    const result = event.results[0][0].transcript;
+                    this.log(`✅ Test successful! Heard: "${result}"`, 'success');
+                    this.updateStatus('✅ Microphone working! Ready for spells.', 'success');
+                };
+
+                testRecognition.onerror = (event) => {
+                    this.log(`❌ Test failed: ${event.error}`, 'error');
+                    this.updateStatus('❌ Microphone test failed', 'error');
+                };
+
+                testRecognition.start();
+            }
+
+            updateStatus(message, type) {
+                const statusEl = document.getElementById('status');
+                statusEl.textContent = message;
+                statusEl.className = `status ${type}`;
+            }
+
+            updateButtons() {
+                const startBtn = document.getElementById('startBtn');
+                const stopBtn = document.getElementById('stopBtn');
+                const startText = document.getElementById('startBtnText');
+
+                if (this.isListening) {
+                    startBtn.disabled = true;
+                    startBtn.classList.add('listening');
+                    startText.textContent = '🎤 Listening...';
+                    stopBtn.disabled = false;
+                } else {
+                    startBtn.disabled = false;
+                    startBtn.classList.remove('listening');
+                    startText.textContent = '🎤 Start Listening';
+                    stopBtn.disabled = true;
+                }
+            }
+
+            log(message, type = 'info') {
+                const logContainer = document.getElementById('logContainer');
+                const entry = document.createElement('div');
+                entry.className = `log-entry ${type}`;
+                entry.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+                
+                logContainer.appendChild(entry);
+                logContainer.scrollTop = logContainer.scrollHeight;
+
+                // Keep only last 10 entries
+                while (logContainer.children.length > 10) {
+                    logContainer.removeChild(logContainer.firstChild);
+                }
+            }
+
+            bindEvents() {
+                // Allow clicking spell badges to test detection
+                document.querySelectorAll('.spell-badge').forEach(badge => {
+                    badge.addEventListener('click', () => {
+                        const spellKey = badge.dataset.spell;
+                        const spellData = this.spells[spellKey];
+                        this.log(`🖱️ Manual test: ${spellData.name}`, 'success');
+                        this.castSpell(spellKey, spellData, 'manual click');
+                    });
+                });
+            }
+        }
+
+        // Global functions for buttons
+        let voiceCaster;
+
+        function startListening() {
+            voiceCaster.startListening();
+        }
+
+        function stopListening() {
+            voiceCaster.stopListening();
+        }
+
+        function testVoice() {
+            voiceCaster.testVoice();
+        }
+
+        // Initialize when page loads
+        window.addEventListener('load', () => {
+            voiceCaster = new VoiceSpellCaster();
+        });
+    </script>
+</body>
+</html>
