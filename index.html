@@ -372,8 +372,11 @@
                 this.recognition = null;
                 this.isListening = false;
                 this.isSupported = false;
+                this.hasError = false;
                 this.finalTranscript = '';
                 this.interimTranscript = '';
+                this.startAttempts = 0;
+                this.maxStartAttempts = 3;
                 
                 // Spell configurations with multiple variations
                 this.spells = {
@@ -434,8 +437,19 @@
                 }
             }
 
-            setupRecognition() {
+            async setupRecognition() {
                 if (!this.isSupported) return;
+
+                // First, request microphone permission explicitly
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    stream.getTracks().forEach(track => track.stop()); // Stop the stream, we just needed permission
+                    this.log('✅ Microphone permission granted', 'success');
+                } catch (error) {
+                    this.log('❌ Microphone permission denied: ' + error.message, 'error');
+                    this.updateStatus('❌ Please allow microphone access and refresh the page', 'error');
+                    return;
+                }
 
                 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
                 this.recognition = new SpeechRecognition();
@@ -444,7 +458,7 @@
                 this.recognition.continuous = true;
                 this.recognition.interimResults = true;
                 this.recognition.lang = 'en-US';
-                this.recognition.maxAlternatives = 3;
+                this.recognition.maxAlternatives = 1; // Reduced to prevent issues
 
                 this.recognition.onstart = () => {
                     this.isListening = true;
@@ -462,10 +476,10 @@
                 };
 
                 this.recognition.onend = () => {
-                    if (this.isListening) {
-                        // Auto-restart if we're supposed to be listening
+                    // Only auto-restart if we're supposed to be listening AND it wasn't an error
+                    if (this.isListening && !this.hasError) {
                         setTimeout(() => {
-                            if (this.isListening) {
+                            if (this.isListening && !this.hasError) {
                                 try {
                                     this.recognition.start();
                                 } catch (e) {
@@ -473,7 +487,9 @@
                                     this.stopListening();
                                 }
                             }
-                        }, 100);
+                        }, 500); // Increased delay to prevent spam
+                    } else {
+                        this.stopListening();
                     }
                 };
             }
@@ -564,20 +580,27 @@
             }
 
             handleError(event) {
+                this.hasError = true;
                 let errorMessage = 'Voice recognition error: ';
                 
                 switch(event.error) {
                     case 'no-speech':
                         errorMessage += 'No speech detected. Try speaking louder.';
+                        this.hasError = false; // This is recoverable
                         break;
                     case 'audio-capture':
                         errorMessage += 'Microphone not accessible. Check permissions.';
                         break;
                     case 'not-allowed':
-                        errorMessage += 'Microphone permission denied. Please allow access.';
+                        errorMessage += 'Microphone permission denied. Please refresh and allow access.';
                         break;
                     case 'network':
                         errorMessage += 'Network error. Check internet connection.';
+                        this.hasError = false; // This is recoverable
+                        break;
+                    case 'aborted':
+                        errorMessage += 'Speech recognition aborted.';
+                        this.hasError = false; // User might have clicked stop
                         break;
                     default:
                         errorMessage += event.error;
@@ -586,14 +609,16 @@
                 this.log(errorMessage, 'error');
                 this.updateStatus('❌ ' + errorMessage, 'error');
                 
-                // Auto-retry for recoverable errors
-                if (['no-speech', 'network'].includes(event.error) && this.isListening) {
+                // Only auto-retry for truly recoverable errors and if we haven't tried too many times
+                if (!this.hasError && this.isListening && this.startAttempts < this.maxStartAttempts) {
+                    this.startAttempts++;
                     setTimeout(() => {
-                        if (this.isListening) {
-                            this.log('Retrying voice recognition...', 'success');
+                        if (this.isListening && !this.hasError) {
+                            this.log(`Retrying voice recognition... (attempt ${this.startAttempts}/${this.maxStartAttempts})`, 'success');
                             try {
                                 this.recognition.start();
                             } catch (e) {
+                                this.log('Retry failed: ' + e.message, 'error');
                                 this.stopListening();
                             }
                         }
@@ -609,6 +634,14 @@
                     return;
                 }
 
+                if (this.isListening) {
+                    this.log('Already listening, ignoring start request', 'error');
+                    return;
+                }
+
+                this.hasError = false;
+                this.startAttempts = 0;
+
                 try {
                     this.finalTranscript = '';
                     this.interimTranscript = '';
@@ -617,14 +650,34 @@
                 } catch (error) {
                     this.log('Failed to start: ' + error.message, 'error');
                     this.updateStatus('❌ Failed to start voice recognition', 'error');
+                    
+                    // If we get "already started" error, force stop and try again
+                    if (error.message.includes('already') || error.message.includes('started')) {
+                        this.recognition.stop();
+                        setTimeout(() => {
+                            try {
+                                this.recognition.start();
+                            } catch (e) {
+                                this.log('Restart failed: ' + e.message, 'error');
+                            }
+                        }, 1000);
+                    }
                 }
             }
 
             stopListening() {
                 this.isListening = false;
+                this.hasError = false;
+                this.startAttempts = 0;
+                
                 if (this.recognition) {
-                    this.recognition.stop();
+                    try {
+                        this.recognition.stop();
+                    } catch (error) {
+                        // Ignore errors when stopping
+                    }
                 }
+                
                 this.updateStatus('🎯 Ready to detect spells! Click "Start Listening" to begin.', 'ready');
                 this.updateButtons();
                 document.getElementById('liveTranscript').innerHTML = 'Speak clearly and say spell names...';
@@ -632,7 +685,12 @@
                 this.log('Voice recognition stopped', 'success');
             }
 
-            testVoice() {
+            async testVoice() {
+                if (this.isListening) {
+                    this.log('Please stop listening first before testing', 'error');
+                    return;
+                }
+
                 this.log('🔧 Testing voice recognition...', 'success');
                 this.updateStatus('🔧 Say "Hello test" to verify your microphone...', 'processing');
                 
@@ -641,23 +699,41 @@
                     return;
                 }
 
-                // Quick test
-                const testRecognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-                testRecognition.continuous = false;
-                testRecognition.interimResults = false;
+                try {
+                    // Quick permission check first
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    stream.getTracks().forEach(track => track.stop());
 
-                testRecognition.onresult = (event) => {
-                    const result = event.results[0][0].transcript;
-                    this.log(`✅ Test successful! Heard: "${result}"`, 'success');
-                    this.updateStatus('✅ Microphone working! Ready for spells.', 'success');
-                };
+                    // Quick test
+                    const testRecognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+                    testRecognition.continuous = false;
+                    testRecognition.interimResults = false;
+                    testRecognition.lang = 'en-US';
 
-                testRecognition.onerror = (event) => {
-                    this.log(`❌ Test failed: ${event.error}`, 'error');
-                    this.updateStatus('❌ Microphone test failed', 'error');
-                };
+                    testRecognition.onresult = (event) => {
+                        const result = event.results[0][0].transcript;
+                        this.log(`✅ Test successful! Heard: "${result}"`, 'success');
+                        this.updateStatus('✅ Microphone working! Ready for spells.', 'success');
+                    };
 
-                testRecognition.start();
+                    testRecognition.onerror = (event) => {
+                        this.log(`❌ Test failed: ${event.error}`, 'error');
+                        this.updateStatus('❌ Microphone test failed', 'error');
+                    };
+
+                    testRecognition.onend = () => {
+                        setTimeout(() => {
+                            if (!this.isListening) {
+                                this.updateStatus('🎯 Ready to detect spells! Click "Start Listening" to begin.', 'ready');
+                            }
+                        }, 3000);
+                    };
+
+                    testRecognition.start();
+                } catch (error) {
+                    this.log(`❌ Permission error: ${error.message}`, 'error');
+                    this.updateStatus('❌ Please allow microphone access', 'error');
+                }
             }
 
             updateStatus(message, type) {
